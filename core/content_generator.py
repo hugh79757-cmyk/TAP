@@ -126,7 +126,6 @@ class ContentGenerator:
             logger.info(f"테마 필터링: {len(raw_items)} -> {len(filtered)}")
             raw_items = filtered if filtered else raw_items
         
-        # 시리즈명 다양성 필터
         seen_series = set()
         diverse_items = []
         for item in raw_items:
@@ -166,31 +165,29 @@ class ContentGenerator:
         return items, selected_region, theme_data
 
     def process_html(self, content, items, theme, region=""):
-        """HTML 후처리 - 이미지 및 지도 링크 삽입"""
+        """HTML 후처리 - 이미지 및 지도 링크 삽입 (SEO 최적화)"""
         handler = self._get_image_handler()
         
-        # 각 장소의 h3 태그를 찾아서 순서대로 처리
         for item in items:
             title = item['title']
+            
+            # SEO 최적화된 이미지 alt 텍스트
+            alt_text = f"{title} - {region} {theme} 위치 및 정보"
             
             # 1. 이미지 삽입
             img_url = handler.get_image(item, region=region, theme=theme)
             if img_url:
-                img_tag = f'<figure class="wp-block-image"><img src="{img_url}" alt="{title} {theme}"/></figure>'
-                # h3 태그 뒤에 이미지 삽입
+                img_tag = f'<figure class="wp-block-image"><img src="{img_url}" alt="{alt_text}" title="{title}"/></figure>'
                 title_keyword = title.split()[0] if ' ' in title else title[:10]
                 pattern = f'(<h3>[^<]*{re.escape(title_keyword)}[^<]*</h3>)'
                 if re.search(pattern, content):
                     content = re.sub(pattern, f'\\1\n{img_tag}', content, count=1)
             
-            # 2. 지도 링크 - 해당 장소의 info-box에만 삽입
+            # 2. 지도 링크 - 현재 페이지에서 열기 (전면 광고용)
             map_url = get_naver_map_link(title)
-            map_tag = f'<p><a href="{map_url}" target="_blank">📍 네이버 지도에서 보기</a></p>'
+            map_tag = f'<p class="map-link"><a href="{map_url}">📍 {title} 네이버 지도에서 보기</a></p>'
             
-            # 해당 장소 섹션의 info-box 찾기 (h3 태그 이후의 첫 번째 info-box)
             title_keyword = title.split()[0] if ' ' in title else title[:10]
-            
-            # 패턴: h3 태그 ~ 다음 h3 또는 h2 전까지의 info-box
             section_pattern = f'(<h3>[^<]*{re.escape(title_keyword)}[^<]*</h3>.*?)(<div class="info-box">)(.*?)(</div>)'
             
             def replace_info_box(match):
@@ -199,7 +196,6 @@ class ContentGenerator:
                 box_content = match.group(3)
                 box_close = match.group(4)
                 
-                # 이미 지도 링크가 있는지 확인
                 if '네이버 지도' not in box_content:
                     return f'{before}{box_open}{box_content}\n{map_tag}\n{box_close}'
                 return match.group(0)
@@ -207,9 +203,8 @@ class ContentGenerator:
             content = re.sub(section_pattern, replace_info_box, content, count=1, flags=re.DOTALL)
         
         # 3. 마무리 섹션에 안내 문구 추가
-        notice = '<p class="notice">※ 가격 정보와 상세 문의 사항은 네이버 지도 후기를 참조해 주세요.</p>'
+        notice = '<p class="notice">※ 최신 가격 정보와 상세 문의 사항은 네이버 지도 후기를 참조해 주세요.</p>'
         if '마무리</h2>' in content and notice not in content:
-            # 마무리 섹션의 마지막 </p> 뒤에 추가
             content = re.sub(
                 r'(마무리</h2>.*?)(<p>.*?</p>)(\s*)$',
                 f'\\1\\2\n{notice}\\3',

@@ -1,41 +1,36 @@
-name: Auto Publish
+name: Auto Publish Blog
 
 on:
   schedule:
-    # 무작위 효과를 위해 여러 시간대 설정 (UTC 기준)
-    # 봇 탐지 회피를 위한 불규칙 패턴
-    - cron: '23 22 * * *'   # 07:23 KST
-    - cron: '47 4 * * *'    # 13:47 KST  
-    - cron: '11 11 * * *'   # 20:11 KST
-  workflow_dispatch:  # 수동 실행
+    # 테스트용: 5분마다 (나중에 하루 3회로 변경)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install dependencies (no cache)
       run: |
-        pip install -r requirements.txt
-        pip install google-api-python-client google-auth google-auth-oauthlib
+        python -m pip install --upgrade pip
+        pip install --no-cache-dir python-dotenv==1.0.1
+        pip install --no-cache-dir openai==1.12.0
+        pip install --no-cache-dir httpx==0.25.2
+        pip install --no-cache-dir -r requirements.txt
     
     - name: Restore token
       run: |
         echo "${{ secrets.BLOGGER_TOKEN_PICKLE }}" | base64 -d > token.pickle
         echo "${{ secrets.BLOGGER_CLIENT_SECRET }}" | base64 -d > client_secret.json
-    
-    - name: Random delay (0-30분)
-      run: |
-        DELAY=$((RANDOM % 1800))
-        echo "대기 시간: ${DELAY}초"
-        sleep $DELAY
     
     - name: Run publisher
       env:
