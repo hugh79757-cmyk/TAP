@@ -1,0 +1,93 @@
+
+# ====== 캠핑 키워드 ======
+camping:
+  - theme: "글램핑 추천"
+    source: "camping"
+    method: "glamping"
+    keywords: ["글램핑", "감성캠핑", "럭셔리캠핑"]
+  
+  - theme: "오토캠핑장"
+    source: "camping"
+    method: "auto_camping"
+    keywords: ["오토캠핑", "차박", "자동차캠핑"]
+  
+  - theme: "카라반 캠핑"
+    source: "camping"
+    method: "caravan"
+    keywords: ["카라반", "이동식숙소", "캠핑카"]
+  
+  - theme: "반려동물 캠핑장"
+    source: "camping"
+    method: "pet_friendly"
+    keywords: ["애견동반", "펫캠핑", "반려견캠핑"]
+  
+  - theme: "가족 캠핑장"
+    source: "camping"
+    method: "search"
+    keywords: ["가족캠핑", "아이캠핑", "키즈캠핑"]
+
+# ====== 두루누비(길) 키워드 ======
+trails:
+  - theme: "걷기 좋은 길"
+    source: "durunubi"
+    method: "walking"
+    keywords: ["걷기길", "산책로", "둘레길"]
+  
+  - theme: "자전거 코스"
+    source: "durunubi"
+    method: "bike"
+    keywords: ["자전거길", "라이딩코스", "사이클링"]
+  
+  - theme: "트레킹 코스"
+    source: "durunubi"
+    method: "walking"
+    keywords: ["트레킹", "등산로", "산행코스"]
+  
+  - theme: "해안 둘레길"
+    source: "durunubi"
+    method: "walking"
+    keywords: ["해안길", "해변산책", "바다둘레길"]
+
+# ====== 시즌별 캠핑/트레일 키워드 ======
+seasonal_extended:
+  봄:
+    - theme: "봄꽃 트레킹"
+      source: "durunubi"
+      method: "walking"
+    - theme: "봄 캠핑 명소"
+      source: "camping"
+      method: "popular"
+  
+  여름:
+    - theme: "계곡 캠핑장"
+      source: "camping"
+      method: "search"
+      keywords: ["계곡", "물놀이", "시원한"]
+    - theme: "숲속 캠핑장"
+      source: "camping"
+      method: "search"
+      keywords: ["숲", "산림", "피톤치드"]
+  
+  가을:
+    - theme: "단풍길 트레킹"
+      source: "durunubi"
+      method: "walking"
+    - theme: "가을 캠핑 추천"
+      source: "camping"
+      method: "popular"
+  
+  겨울:
+    - theme: "겨울 글램핑"
+      source: "camping"
+      method: "glamping"
+    - theme: "눈꽃 트레킹"
+      source: "durunubi"
+      method: "walking"
+
+# ====== 제목 템플릿 추가 ======
+title_templates_extended:
+  - "{year}년 {theme} BEST {count}, 직접 가본 후기"
+  - "{season} {theme} {count}곳, 예약 전 필독!"
+  - "{theme} 추천 {count}선, 초보자도 OK"
+  - "인생 {theme} {count}곳, 인스타 감성 폭발"
+  - "{region} {theme} 총정리, 현지인 추천 {count}곳"
