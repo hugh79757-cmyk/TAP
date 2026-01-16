@@ -1,6 +1,7 @@
-"""CSV 파일 기반 데이터 로더 + Photo API 이미지 연동 + 지역 필터링 강화"""
+"""CSV 파일 기반 데이터 로더 + Photo API 이미지 연동 + 이미지 검증"""
 
 import pandas as pd
+import requests
 from pathlib import Path
 import random
 import urllib.parse
@@ -38,8 +39,18 @@ class CSVDataLoader:
         encoded = urllib.parse.quote(name)
         return f"https://map.naver.com/v5/search/{encoded}"
     
+    def _is_image_valid(self, url: str) -> bool:
+        """이미지 URL이 실제로 존재하는지 확인"""
+        if not url:
+            return False
+        try:
+            resp = requests.head(url, timeout=5, allow_redirects=True)
+            return resp.status_code == 200
+        except:
+            return False
+    
     def _search_photo(self, keywords: list, used_images: set) -> str:
-        """키워드 리스트로 사진 검색, 중복 제외, https 변환"""
+        """키워드 리스트로 사진 검색, 중복 제외, https 변환, 유효성 검증"""
         if not self.photo_api:
             return ""
         
@@ -51,11 +62,14 @@ class CSVDataLoader:
                 for photo in photos:
                     url = photo.get('galWebImageUrl', '')
                     if url and url not in used_images:
-                        used_images.add(url)
                         # http -> https 변환
                         if url.startswith('http://'):
                             url = url.replace('http://', 'https://')
-                        return url
+                        
+                        # 이미지 유효성 검증
+                        if self._is_image_valid(url):
+                            used_images.add(url)
+                            return url
             except:
                 continue
         return ""
@@ -67,7 +81,6 @@ class CSVDataLoader:
         
         df = self.camping_df.copy()
         
-        # 테마 필터링
         theme_filters = {
             '글램핑': df['주요시설 글램핑'] > 0,
             '카라반': df['주요시설 카라반'] > 0,
@@ -84,9 +97,7 @@ class CSVDataLoader:
         if theme in theme_filters:
             df = df[theme_filters[theme]]
         
-        # 지역별 개수 집계
         region_counts = df.groupby('도').size()
-        # 3개 이상인 지역만 반환
         valid_regions = region_counts[region_counts >= 3].index.tolist()
         
         return valid_regions
@@ -98,7 +109,6 @@ class CSVDataLoader:
         
         df = self.camping_df.copy()
         
-        # 테마 필터링
         theme_filters = {
             '글램핑': df['주요시설 글램핑'] > 0,
             '카라반': df['주요시설 카라반'] > 0,
@@ -115,28 +125,23 @@ class CSVDataLoader:
         if theme in theme_filters:
             df = df[theme_filters[theme]]
         
-        # 지역이 지정되지 않았으면 랜덤 선택
         if not region:
             available_regions = self._get_available_regions(theme)
             if not available_regions:
                 return []
             region = random.choice(available_regions)
         
-        # 지역 필터링 (도 기준으로 정확히)
         df = df[df['도'] == region]
         
         if len(df) == 0:
             return []
         
-        # limit이 None이면 3~6 랜덤
         if limit is None:
             limit = random.randint(3, min(6, len(df)))
         
-        # 랜덤 샘플링
         if len(df) > limit:
             df = df.sample(n=limit)
         
-        # 결과 변환 + 이미지 검색
         results = []
         used_images = set()
         
@@ -146,11 +151,11 @@ class CSVDataLoader:
             do_name = str(row['도']) if pd.notna(row['도']) else ''
             sigungu = str(row['시군구']) if pd.notna(row['시군구']) else ''
             
-            # 이미지 검색 키워드
             search_keywords = [
                 f"{sigungu} 캠핑" if sigungu else None,
                 f"{do_name} 캠핑",
                 f"{sigungu} 자연" if sigungu else None,
+                f"{sigungu} 풍경" if sigungu else None,
                 do_name
             ]
             image_url = self._search_photo([k for k in search_keywords if k], used_images)
@@ -172,7 +177,7 @@ class CSVDataLoader:
         return results
     
     def get_articles_by_category(self, category: str, region: str = None, limit: int = None) -> list:
-        """카테고리별 여행기사 조회 (이미지 포함)"""
+        """카테고리별 여행기사 조회"""
         if self.articles_df is None:
             return []
         
@@ -187,7 +192,6 @@ class CSVDataLoader:
         if len(df) == 0:
             return []
         
-        # limit이 None이면 3~6 랜덤
         if limit is None:
             limit = random.randint(3, min(6, len(df)))
         
@@ -198,9 +202,13 @@ class CSVDataLoader:
         for _, row in df.iterrows():
             name = str(row['콘텐츠명']).strip()
             image_url = str(row.get('대표이미지 URL', '')) if pd.notna(row.get('대표이미지 URL', '')) else ''
-            # http -> https 변환
+            
             if image_url.startswith('http://'):
                 image_url = image_url.replace('http://', 'https://')
+            
+            # 이미지 유효성 검증
+            if image_url and not self._is_image_valid(image_url):
+                image_url = ''
             
             results.append({
                 'title': name,
@@ -218,7 +226,7 @@ class CSVDataLoader:
         return results
     
     def get_random_theme(self) -> dict:
-        """랜덤 테마 선택 - 데이터가 충분한 테마만"""
+        """랜덤 테마 선택"""
         camping_themes = [
             {'theme': '글램핑', 'type': 'camping'},
             {'theme': '카라반', 'type': 'camping'},
@@ -233,7 +241,6 @@ class CSVDataLoader:
             {'theme': '명소여행', 'type': 'article'},
         ]
         
-        # 캠핑과 기사 중 랜덤 선택 (7:3 비율)
         if random.random() < 0.7:
             return random.choice(camping_themes)
         else:
@@ -253,12 +260,3 @@ class CSVDataLoader:
 
 def load_csv_loader():
     return CSVDataLoader()
-
-
-if __name__ == "__main__":
-    loader = load_csv_loader()
-    print("=== CSV 데이터 로더 테스트 ===")
-    items = loader.get_camping_by_theme('글램핑')
-    print(f"글램핑 결과: {len(items)}개")
-    for item in items:
-        print(f"  - {item['title']} ({item['do']} {item['sigungu']})")
