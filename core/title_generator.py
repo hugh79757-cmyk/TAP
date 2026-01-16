@@ -2,6 +2,7 @@
 """다양한 제목 템플릿 기반 제목 생성기"""
 
 import random
+import re
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -37,29 +38,38 @@ class TitleGenerator:
         else:
             return "겨울"
     
-    def generate(self, region: str, theme: str, count: int, 
+    def generate(self, region: str, theme: str, count: int = None, 
                  category: str = None) -> str:
+        """제목 생성"""
         template = random.choice(self.templates)
         
         now = datetime.now()
         variables = {
             "region": region,
             "theme": theme,
-            "count": count,
             "year": now.year,
             "month": now.month,
             "season": self._get_season(),
         }
         
+        # {count} 변수 제거
+        template = re.sub(r'\s*{count}곳', '', template)
+        template = re.sub(r'\s*{count}선', '', template)
+        template = re.sub(r'\s*{count}', '', template)
+        
         try:
             title = template.format(**variables)
-        except KeyError as e:
-            title = f"{region} {theme} {count}곳 추천"
+        except KeyError:
+            title = f"{region} {theme} 추천"
+        
+        # 빈 공백 정리
+        title = re.sub(r'\s+', ' ', title).strip()
         
         return title
     
-    def generate_multiple(self, region: str, theme: str, count: int, 
+    def generate_multiple(self, region: str, theme: str, count: int = None, 
                           num_titles: int = 5) -> list:
+        """여러 제목 생성"""
         titles = set()
         attempts = 0
         max_attempts = num_titles * 3
@@ -80,7 +90,7 @@ if __name__ == "__main__":
     gen = TitleGenerator()
     print(f"총 템플릿 수: {len(gen.templates)}개\n")
     
-    titles = gen.generate_multiple("강원 영서", "계곡 캠핑장", 6, num_titles=10)
+    titles = gen.generate_multiple("강원도", "글램핑", num_titles=10)
     print("생성된 제목 샘플:")
     for i, title in enumerate(titles, 1):
         print(f"  {i}. {title}")

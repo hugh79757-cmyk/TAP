@@ -719,3 +719,70 @@
 2026-01-16 11:29:17,435 [INFO] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
 2026-01-16 11:29:18,522 [INFO] 성공: 워드프레스에 임시글이 생성되었습니다.
 2026-01-16 11:29:18,522 [INFO] URL: https://kuta.informationhot.kr/?p=7161
+2026-01-16 16:25:18,385 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 16:25:19,726 - core.blogger_publisher - INFO - 토큰 갱신 중...
+2026-01-16 16:25:19,947 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 16:25:19,949 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 16:25:20,034 - __main__ - INFO - 테마: 명소여행, 지역: 인천, 아이템: 6개
+2026-01-16 16:25:20,034 - __main__ - ERROR - 콘텐츠 생성 실패: AIWriter.generate_full_content() missing 1 required positional argument: 'angle'
+2026-01-16 16:26:03,247 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 16:26:04,556 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 16:26:04,557 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 16:26:04,659 - __main__ - INFO - 테마: 반려견 동반, 지역: 강원도, 아이템: 6개
+2026-01-16 16:26:23,615 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 16:26:23,633 - __main__ - INFO - 제목: 붐비지 않는 강원도 반려견 동반 6곳
+2026-01-16 16:26:25,443 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_0552671912.html
+2026-01-16 16:26:25,444 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_0552671912.html
+2026-01-16 16:26:25,444 - __main__ - INFO - 작업 완료!
+2026-01-16 16:32:01,682 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 16:32:03,314 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 16:32:03,315 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 16:32:03,423 - __main__ - INFO - 테마: 이색체험여행, 지역: 제주도, 아이템: 6개
+2026-01-16 16:32:24,305 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 16:32:24,328 - __main__ - INFO - 제목: 기대 이상이었던 제주도 이색체험여행 6곳
+2026-01-16 16:32:26,070 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_01101144012.html
+2026-01-16 16:32:26,070 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_01101144012.html
+2026-01-16 16:32:26,070 - __main__ - INFO - 작업 완료!
+2026-01-16 17:05:43,789 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 17:05:45,219 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 17:05:45,220 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 17:05:45,333 - __main__ - INFO - 테마: 반려견 동반, 지역: 경기도, 아이템: 6개
+2026-01-16 17:06:15,961 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 17:06:15,976 - __main__ - INFO - 제목: 경기도 토박이만 아는 반려견 동반 6선
+2026-01-16 17:06:17,719 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_01022846369.html
+2026-01-16 17:06:17,719 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_01022846369.html
+2026-01-16 17:06:17,720 - __main__ - INFO - 작업 완료!
+2026-01-16 17:17:04,556 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 17:17:05,977 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 17:17:05,978 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 17:17:24,336 - __main__ - INFO - 테마: 여름 물놀이, 지역: 전라남도, 아이템: 6개
+2026-01-16 17:17:46,314 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 17:17:46,331 - __main__ - INFO - 제목: 전라남도 핵심만 모은 여름 물놀이 6곳
+2026-01-16 17:17:48,401 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_0733877126.html
+2026-01-16 17:17:48,401 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/6_0733877126.html
+2026-01-16 17:17:48,401 - __main__ - INFO - 작업 완료!
+2026-01-16 17:24:53,147 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 17:24:54,615 - core.blogger_publisher - INFO - 토큰 갱신 중...
+2026-01-16 17:24:54,843 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 17:24:54,844 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 17:25:06,656 - __main__ - INFO - 테마: 카라반, 지역: 울산광역시, 아이템: 6개
+2026-01-16 17:25:23,850 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 17:25:23,867 - __main__ - INFO - 제목: 뷰 맛집 울산광역시 카라반
+2026-01-16 17:25:25,583 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post.html
+2026-01-16 17:25:25,583 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post.html
+2026-01-16 17:25:25,583 - __main__ - INFO - 작업 완료!
+2026-01-16 17:38:34,516 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 17:38:35,840 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 17:38:35,841 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 17:38:35,931 - __main__ - INFO - 선택된 지역: 전북특별자치도, 아이템 수: 5개
+2026-01-16 17:38:35,931 - __main__ - INFO -   - 철쭉 꽃길 따라 성밟기, 고창읍성 (전북특별자치도 )
+2026-01-16 17:38:35,931 - __main__ - INFO -   - 오늘은 나도 K-팝 스타, 서울 하이커그라운드 (서울 )
+2026-01-16 17:38:35,931 - __main__ - INFO -   - 용이 승천한 그곳에서 용의 기운을 얻다, 고흥 미르마루길 (전라남도 )
+2026-01-16 17:38:35,931 - __main__ - INFO -   - 화산재가 쌓여 만들어진 돌로 빚은 신비의 절, 화순 운주사 (전라남도 )
+2026-01-16 17:38:35,931 - __main__ - INFO -   - 서포 김만중의 좌절과 꿈이 깃든 절해고도, 남해 노도 (경상남도 )
+2026-01-16 17:38:35,931 - __main__ - INFO - 테마: 자연풍경여행, 지역: 전북특별자치도, 아이템: 5개
+2026-01-16 17:38:55,196 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 17:38:55,215 - __main__ - INFO - 제목: 재방문율 높은 전북특별자치도 자연풍경여행
+2026-01-16 17:38:56,941 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post_16.html
+2026-01-16 17:38:56,941 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post_16.html
+2026-01-16 17:38:56,942 - __main__ - INFO - 작업 완료!
