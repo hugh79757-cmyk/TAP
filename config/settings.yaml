@@ -1,0 +1,17 @@
+openai:
+  api_key: ""
+  model: "gpt-4o-mini"
+  temperature: 0.7
+wordpress:
+  site_url: ""
+  username: ""
+  app_password: ""
+  default_category: 1
+  default_status: "draft"
+tour_api:
+  service_key: ""
+content:
+  posts_per_day: 2
+  min_items: 3
+  max_items: 6
+  use_ai: true
