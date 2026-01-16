@@ -1,10 +1,10 @@
-"""네이버 지도 링크 생성 모듈"""
+"""네이버 지도 링크 생성 모듈 - 장소명만 사용"""
 
 import urllib.parse
 
 
 def get_naver_map_link(title: str, region: str = "") -> str:
-    """네이버 지도 검색 링크 생성 (장소명만 사용)
+    """네이버 지도 검색 링크 생성
     
     Args:
         title: 장소명

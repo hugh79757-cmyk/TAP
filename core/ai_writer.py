@@ -1,224 +1,192 @@
-"""AI 글쓰기 모듈"""
-
-from openai import OpenAI
-from pathlib import Path
-import yaml
+import os
 import re
+import random
+import numpy as np
+from openai import OpenAI
+from dotenv import load_dotenv
+import logging
+import datetime
+
+load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class AIWriter:
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", temperature: float = 0.7):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
-        self.temperature = temperature
+    FORBIDDEN_PATTERNS = [
+        r'```html',
+        r'```',
+        r'<\!DOCTYPE.*?>',
+        r'<html.*?>',
+        r'</html>',
+        r'<head>.*?</head>',
+        r'<body.*?>',
+        r'</body>',
+        r'<style.*?>.*?</style>',
+        r'<script.*?>.*?</script>',
+    ]
     
-    def generate_title(self, theme: str, items: list, region: str = "", angle: str = "") -> str:
-        places = [item.get('title', '') for item in items[:5]]
-        count = len(items)
+    FORBIDDEN_WORDS = [
+        '인생', '꿀팁', '강추', '대박',
+        '소개해드리겠습니다', '소개하겠습니다', '반갑습니다', '안녕하세요', 
+        '블로거입니다', '소개해 드릴게요', '알려드릴게요', '가보셨나요', 
+        '필독', '꼭 가봐야', '인생샷', '최강', '완벽한', '엄선한',
+        '소개합니다', '알아보겠습니다', '살펴보겠습니다', '떠나보시길 바랍니다',
+        '특히'
+    ]
+    
+    TITLE_TEMPLATES = [
+        "{region} {facility} 추천! {angle} 좋아하는 분들을 위한 안내",
+        "{angle} 좋아하는 분들을 위한 {region} {facility} {count}곳",
+        "{region} {facility} BEST {count} ({angle})",
+        "{region} 근교 {facility}, {angle} 즐기기 좋은 곳 {count}선",
+        "{angle} 캠퍼를 위한 {region} {facility} {count}곳",
+        "{region}에서 {angle} 즐길 수 있는 {facility} {count}선",
+        "{region} {angle} {facility} 총정리 {count}곳",
+        "{region} {facility} 완전정복! {angle} 명소 {count}곳 모음",
+        "{year}년 {region} {facility} {count}곳 총정리 ({angle})",
+        "{region} {facility} 어디로 갈까? {angle} 명소 {count}곳",
+        "{angle} 가능한 {region} {facility} {count}곳 한눈에 보기",
+        "{region} {angle} {facility} 모음집 :: {count}곳",
+        "{region} {facility} 다녀왔습니다 - {angle} {count}곳 후기",
+        "{angle} 떠나기 좋은 {region} {facility} {count}곳 방문기",
+        "{region} {facility} 솔직 후기 :: {angle} {count}곳 비교",
+        "직접 가본 {region} {facility} {count}곳 ({angle})",
+        "{season}에 가기 좋은 {region} {facility} {count}선 ({angle})",
+        "{season} {region} 여행 :: {angle} {facility} {count}곳 안내",
+        "{season} 휴가지로 딱! {region} {angle} {facility} {count}선",
+        "{season} 시즌 {region} {facility} {count}곳, {angle} 특집",
+        "가족과 함께하기 좋은 {region} {facility} {count}곳 ({angle})",
+        "{angle} 함께할 수 있는 {region} {facility} 안내 {count}선",
+        "초보 캠퍼도 OK! {region} {angle} {facility} {count}곳",
+        "{region}에서 {angle} 하기 좋은 {facility} BEST {count}",
+    ]
+    
+    FACILITY_MAP = {
+        'camping': ['캠핑장', '오토캠핑장', '야영장'],
+        'durunubi_walk': ['둘레길', '걷기길', '산책코스', '트레킹코스'],
+        'durunubi_bike': ['자전거길', '라이딩코스', '사이클링코스'],
+    }
+    
+    SEASONS = ['봄', '여름', '가을', '겨울', '주말', '휴가철', '연휴']
+    
+    def __init__(self):
+        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+
+    def get_embedding(self, text: str) -> list:
+        response = self.client.embeddings.create(
+            input=[text.replace("\n", " ")[:8000]],
+            model="text-embedding-3-small"
+        )
+        return response.data[0].embedding
+
+    def calculate_similarity(self, vec1: list, vec2: list) -> float:
+        v1, v2 = np.array(vec1), np.array(vec2)
+        return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+
+    def generate_title(self, theme: str, region: str, angle: str, count: int, source: str = 'camping') -> str:
+        template = random.choice(self.TITLE_TEMPLATES)
+        season = random.choice(self.SEASONS)
+        year = datetime.datetime.now().year
         
-        prompt = f"""여행 정보 블로그 제목을 작성하세요.
-
-주제: {theme}
-지역: {region}
-각도: {angle}
-장소 수: {count}곳
-대표 장소: {', '.join(places[:3])}
-
-[규칙]
-- 지역명 필수 포함
-- 25~45자, 숫자 포함
-
-[금지]
-- "추천", "베스트", "꿀팁", "인생", "필수"
-- 느낌표, 물음표
-
-[예시]
-- 강아지와 함께 가기 좋은 가평 캠핑장 5곳
-- 겨울에도 운영하는 강원 영서 캠핑장 4곳
-- 계곡 바로 앞 충북 캠핑장 6곳
-
-제목:"""
-
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100,
-            temperature=0.7
+        facilities = self.FACILITY_MAP.get(source, ['캠핑장'])
+        facility = random.choice(facilities)
+        
+        title = template.format(
+            region=region,
+            theme=theme,
+            angle=angle,
+            count=count,
+            season=season,
+            year=year,
+            facility=facility
         )
         
-        title = response.choices[0].message.content.strip()
-        title = title.replace('"', '').replace("'", "").strip()
-        
-        # 금지어 제거
-        for word in ['추천', '베스트', '꿀팁', '인생', '필수']:
-            title = title.replace(word, '')
-        
-        return title.strip()
-    
-    def generate_full_content(self, items: list, theme: str, region: str = "", angle: str = "") -> str:
-        places_info = []
-        place_names = []
-        
-        for i, item in enumerate(items, 1):
-            place_names.append(item.get('title', ''))
-            lines = [f"{i}. {item.get('title', '')}"]
-            
-            for key, label in [
-                ('addr1', '주소'), ('tel', '전화'), ('homepage', '홈페이지'),
-                ('overview', '개요'), ('distance', '거리'), ('time', '소요시간'),
-                ('level', '난이도'), ('opentime', '운영'), ('facilities', '편의시설'),
-                ('pets', '반려동물')
-            ]:
-                val = item.get(key, '')
-                if val:
-                    lines.append(f"- {label}: {val[:300] if key == 'overview' else val}")
-            
-            places_info.append('\n'.join(lines))
-        
-        count = len(items)
-        
-        prompt = f"""여행 정보 블로그 글을 작성하세요.
+        logger.info(f"생성된 타이틀: {title}")
+        return title
 
-주제: {theme}
-지역: {region}
-각도: {angle}
-장소 수: {count}곳
+    def _clean_content(self, content: str) -> str:
+        for pattern in self.FORBIDDEN_PATTERNS:
+            content = re.sub(pattern, '', content, flags=re.IGNORECASE|re.DOTALL)
+        
+        for word in self.FORBIDDEN_WORDS:
+            content = re.sub(rf'\b{re.escape(word)}\b', '', content, flags=re.IGNORECASE)
+            content = re.sub(rf'{re.escape(word)}', '', content, flags=re.IGNORECASE)
+        
+        content = re.sub(r'<img[^>]*>', '', content)
+        content = re.sub(r'<figure[^>]*>.*?</figure>', '', content, flags=re.DOTALL)
+        
+        content = re.sub(r'<p>\s*<strong>전화:</strong>\s*[-–—]?\s*</p>', '', content)
+        content = re.sub(r'<p>\s*<strong>운영:</strong>\s*[-–—]?\s*</p>', '', content)
+        content = re.sub(r'<p>\s*<strong>운영시간:</strong>\s*[-–—]?\s*</p>', '', content)
+        content = re.sub(r'<p>\s*<strong>홈페이지:</strong>\s*[-–—]?\s*</p>', '', content)
+        content = re.sub(r'<p>\s*<strong>입장료:</strong>\s*[-–—]?\s*</p>', '', content)
+        
+        content = re.sub(r'<p>\s*</p>', '', content)
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        
+        return content.strip()
+
+    def generate_full_content(self, items: list, theme: str, region: str, angle: str) -> str:
+        places_info = []
+        for i, item in enumerate(items, 1):
+            addr = item.get('addr1', '주소 정보 없음')
+            overview = item.get('overview', '') or ''
+            tel = item.get('tel', '')
+            
+            info = f"{i}. {item['title']}\n   주소: {addr}"
+            if tel and tel != '-':
+                info += f"\n   전화: {tel}"
+            if overview:
+                info += f"\n   특징: {overview[:150]}"
+            places_info.append(info)
+
+        prompt = f"""여행 블로그 글을 작성하세요. HTML 태그만 사용하세요.
+
+주제: {region} {theme}
+관점: {angle}
 
 [장소 정보]
 {chr(10).join(places_info)}
 
-[HTML 구조 - 정확히 따라주세요]
+[글 구조 - 반드시 이 순서로]
 
-<p>도입부 (반드시 5문장 이상):
-- 첫째: {region} 지역의 특징
-- 둘째: {angle} 관점에서 이 글을 쓴 이유
-- 셋째: 소개할 {count}곳이 어떤 곳인지
-- 넷째: 대표 장소 2~3곳 이름 직접 언급
-- 다섯째: 이 글에서 얻을 수 있는 정보
-</p>
+1. 설명문 (p 태그, 5문장 이상):
+<p>{region}의 매력과 {theme}의 특징을 설명하는 도입부입니다. 문장1. 문장2. 문장3. 문장4. 문장5.</p>
 
-<h2>{region} {theme} {count}곳</h2>
+2. 주제 소제목 (h2):
+<h2>{region} {theme}</h2>
 
-<h3>1. 장소명</h3>
-<p>장소 설명 (반드시 4~5문장):
-- 위치와 접근성
-- 시설/코스의 특징
-- {angle} 관점에서의 장점
-- 어떤 사람에게 적합한지
-</p>
-<div class="info-box">
-<p><strong>주소:</strong> 실제주소</p>
-<p><strong>전화:</strong> 전화번호 (있으면)</p>
-<p><strong>운영:</strong> 운영시간 (있으면)</p>
-</div>
+3. 각 장소 (h3 + p + info-box):
+<h3>장소명</h3>
+<p>장소 설명 4-5문장.</p>
+<div class="info-box"><p><strong>주소:</strong> 실제주소</p></div>
 
-(2번~{count}번도 동일 형식)
-
+4. 마무리 (h2 + p):
 <h2>마무리</h2>
-<p>마무리 (반드시 5문장 이상):
-- 첫째: {count}곳 전체 요약
-- 둘째: {angle} 기준 방문 시 참고할 점
-- 셋째: 장소 1~2곳 다시 언급하며 특징 강조
-- 넷째: 예약이나 방문 시 주의사항
-- 다섯째: {region} 지역의 다른 볼거리 언급
-</p>
+<p>마무리 5문장 이상. 전체 요약과 방문 팁.</p>
 
-[절대 금지]
-- img 태그, figure 태그 (이미지는 별도 처리)
-- "안녕하세요", "반갑습니다", "~입니다" 로 시작
-- "50대", "블로거", "오늘은", "소개해드리겠습니다"
-- "특히", "추천드립니다", "강력 추천"
-- "여러분", "~해보세요!", "감사합니다"
-- "확인 필요", "현장 문의"
+[문체]
+- 경어체 (~입니다, ~습니다)
+- 객관적이고 신뢰감 있는 톤
 
-[필수]
-- 경어체 사용: "~입니다", "~있습니다"
-- 도입부 5문장 이상
-- 마무리 5문장 이상
-- 각 장소 설명 4~5문장
-- 총 2500자 이상
+[금지]
+- "특히" 단어 절대 금지
+- "소개합니다", "알아보겠습니다" 금지
+- 마크다운 코드 블록 금지
+- <img> 태그 금지
 
-글:"""
+<p>로 바로 시작하세요 (설명문부터):"""
 
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=4000,
-            temperature=self.temperature
+            max_tokens=3500,
+            temperature=0.7
         )
-        
-        content = response.choices[0].message.content.strip()
-        
-        # 후처리: 금지어 및 불필요한 표현 제거
-        content = self._clean_content(content)
-        
-        return content
-    
-    def _clean_content(self, content: str) -> str:
-        """금지어 및 불필요한 표현 제거"""
-        
-        # img, figure 태그 제거
-        content = re.sub(r'<figure[^>]*>.*?</figure>', '', content, flags=re.DOTALL)
-        content = re.sub(r'<img[^>]*/?>', '', content)
-        
-        # 금지 표현 제거
-        remove_patterns = [
-            r'안녕하세요[!.,]?\s*',
-            r'반갑습니다[!.,]?\s*',
-            r'50대\s*(여행\s*)?(정보\s*)?블로거[가-힣]*[!.,]?\s*',
-            r'오늘은\s*',
-            r'소개해\s*드리[가-힣]*[!.,]?\s*',
-            r'특히\s*',
-            r'추천\s*드립니다[!.,]?\s*',
-            r'강력\s*추천[!.,]?\s*',
-            r'감사합니다[!.,]?\s*',
-        ]
-        
-        for pattern in remove_patterns:
-            content = re.sub(pattern, '', content)
-        
-        # 빈 p 태그 제거
-        content = re.sub(r'<p>\s*</p>', '', content)
-        
-        # 연속 공백 정리
-        content = re.sub(r'\n{3,}', '\n\n', content)
-        
-        return content.strip()
-    
-    def generate_tags(self, theme: str, items: list, region: str = "", angle: str = "") -> list:
-        prompt = f"여행 블로그 태그 10개 (쉼표 구분, 해시태그 없이): {region} {theme} {angle}"
-        
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100,
-            temperature=0.5
-        )
-        
-        tags = response.choices[0].message.content.strip().split(',')
-        return [t.strip().replace('#', '') for t in tags[:10]]
-    
-    def generate_excerpt(self, theme: str, count: int, region: str = "", angle: str = "") -> str:
-        prompt = f"블로그 메타 설명 2문장 (120~155자, 경어체): {region} {theme} {count}곳 {angle}"
-        
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100,
-            temperature=0.6
-        )
-        
-        return response.choices[0].message.content.strip()
+        raw = response.choices[0].message.content
+        return self._clean_content(raw)
 
 
 def load_ai_writer():
-    config_path = Path(__file__).parent.parent / "config" / "settings.yaml"
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    openai_config = config.get('openai', {})
-    return AIWriter(
-        api_key=openai_config.get('api_key', ''),
-        model=openai_config.get('model', 'gpt-4o-mini'),
-        temperature=openai_config.get('temperature', 0.7)
-    )
+    return AIWriter() if os.getenv('OPENAI_API_KEY') else None

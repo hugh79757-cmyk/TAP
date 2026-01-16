@@ -1,4 +1,31 @@
+# 환경 변수
 .env
+
+# 인증 파일 (민감정보)
+service_account.json
+client_secret.json
+client_secret_*.json
+token.pickle
+
+# 데이터베이스
+tap.db
+
+# 캐시
 cache/
-logs/
 __pycache__/
+*.pyc
+.DS_Store
+
+# 로그
+logs/
+
+# 테스트 파일
+test_*.py
+fix_paths.py
+
+# 가상환경
+venv/
+
+# 백업
+*.bak
+project_backup.txt

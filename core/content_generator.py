@@ -1,443 +1,242 @@
-"""콘텐츠 생성 메인 모듈"""
-
+import logging
+import random
+import re
+import unicodedata
 from pathlib import Path
 import yaml
-import random
-import logging
-import re
 from collections import defaultdict
-
 from core.theme_selector import ThemeSelector
 from core.image_handler import ImageHandler
+from core.database import Session, PlaceLog
 from core.naver_map import get_naver_map_link
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRY = 3
+def normalize_title(title):
+    if not title: return ""
+    t = unicodedata.normalize('NFKD', title)
+    t = re.sub(r'\s+', '', t)
+    t = re.sub(r'[^\w가-힣]', '', t)
+    return t.lower()
 
+def extract_base_name(title):
+    """'서해랑길 88코스' -> '서해랑길' 추출"""
+    if not title: return ""
+    match = re.match(r'^([가-힣]+(?:길|로|trail)?)', title)
+    return match.group(1) if match else title[:4]
 
 class ContentGenerator:
-    """콘텐츠 생성기"""
-    
     def __init__(self):
         self.config_path = Path(__file__).parent.parent / "config"
-        self.cache_path = Path(__file__).parent.parent / "cache"
-        
-        self._settings = None
-        self._themes = None
         self._regions = None
-        self._theme_selector = None
         self._image_handler = None
-        self._camping_api = None
-        self._durunubi_api = None
-        self._photo_api = None
-        self._ai_writer = None
-    
-    @property
-    def settings(self):
-        if self._settings is None:
-            with open(self.config_path / "settings.yaml", 'r', encoding='utf-8') as f:
-                self._settings = yaml.safe_load(f)
-        return self._settings
-    
-    @property
-    def themes(self):
-        if self._themes is None:
-            with open(self.config_path / "themes.yaml", 'r', encoding='utf-8') as f:
-                self._themes = yaml.safe_load(f)
-        return self._themes
-    
+
     @property
     def regions(self):
         if self._regions is None:
             with open(self.config_path / "regions.yaml", 'r', encoding='utf-8') as f:
                 self._regions = yaml.safe_load(f)
         return self._regions
-    
-    @property
-    def use_ai(self):
-        key = self.settings.get('openai', {}).get('api_key', '')
-        use = self.settings.get('content', {}).get('use_ai', False)
-        return bool(key and key.startswith('sk-') and use)
-    
-    @property
-    def theme_selector(self):
-        if self._theme_selector is None:
-            history_file = self.cache_path / "theme_history.json"
-            self._theme_selector = ThemeSelector(self.themes, history_file)
-        return self._theme_selector
-    
-    @property
-    def image_handler(self):
+
+    def _get_region_group(self, addr):
+        for group, cities in self.regions.items():
+            for city in cities:
+                if city in addr: return group
+        return None
+
+    def _get_image_handler(self):
         if self._image_handler is None:
-            self._image_handler = ImageHandler(self.photo_api)
+            from core.photo_api import load_photo_client
+            self._image_handler = ImageHandler(photo_api=load_photo_client())
         return self._image_handler
-    
-    @property
-    def ai_writer(self):
-        if self._ai_writer is None and self.use_ai:
-            from core.ai_writer import load_ai_writer
-            self._ai_writer = load_ai_writer()
-        return self._ai_writer
-    
-    @property
-    def camping_api(self):
-        if self._camping_api is None:
-            from core.camping_api import load_camping_client
-            self._camping_api = load_camping_client()
-        return self._camping_api
-    
-    @property
-    def durunubi_api(self):
-        if self._durunubi_api is None:
-            from core.durunubi_api import load_durunubi_client
-            self._durunubi_api = load_durunubi_client()
-        return self._durunubi_api
-    
-    @property
-    def photo_api(self):
-        if self._photo_api is None:
-            try:
-                from core.photo_api import load_photo_client
-                self._photo_api = load_photo_client()
-            except Exception as e:
-                logger.error(f"photo_api 로드 실패: {e}")
-        return self._photo_api
-    
-    def select_theme(self) -> dict:
-        return self.theme_selector.select()
-    
-    def select_theme_with_images(self) -> tuple:
-        """이미지 확보 가능한 주제 선택"""
-        for attempt in range(MAX_RETRY):
-            logger.info(f"주제 선택 시도 {attempt + 1}/{MAX_RETRY}")
-            
-            theme_data = self.select_theme()
-            items, region, theme_data = self.fetch_items(theme_data)
-            
-            if not items:
-                logger.warning("데이터 없음, 다른 주제 선택")
-                continue
-            
-            min_items = self.settings.get('content', {}).get('min_items', 3)
-            if self.image_handler.check_images_available(items[:6], region, theme_data.get('theme', ''), min_items):
-                logger.info("이미지 확보 가능, 진행")
-                return items, region, theme_data
-            
-            logger.warning("이미지 부족, 다른 주제 선택")
-        
-        logger.error("이미지 확보 실패, 마지막 결과로 진행")
-        return items, region, theme_data
-    
-    def fetch_items(self, theme_data: dict) -> tuple:
+
+    def fetch_items(self, theme_data):
         source = theme_data.get('source', 'camping')
         
         if source == 'camping':
-            items = self._fetch_camping()
-        elif source == 'durunubi_walk':
-            items = self._fetch_walk()
-        elif source == 'durunubi_bike':
-            items = self._fetch_bike()
+            return self._fetch_camping(theme_data)
+        elif source in ('durunubi_walk', 'durunubi_bike'):
+            return self._fetch_durunubi(theme_data, source)
         else:
-            items = []
+            return self._fetch_camping(theme_data)
+
+    def _fetch_camping(self, theme_data):
+        from core.camping_api import load_camping_client
+        api = load_camping_client()
+        raw_items = api.get_campsite_list(num_of_rows=200)
         
-        if not items:
-            return [], '', theme_data
+        filter_key = theme_data.get('filter_key')
+        filter_contains = theme_data.get('filter_contains')
+        filter_value = theme_data.get('filter_value')
         
-        filtered = self._filter_items(items, theme_data)
-        grouped = self._group_by_region(filtered)
-        
-        if not grouped:
-            return filtered[:6], '', theme_data
-        
-        valid = {k: v for k, v in grouped.items() if len(v) >= 3}
-        if valid:
-            region = random.choice(list(valid.keys()))
-        else:
-            region = max(grouped.keys(), key=lambda k: len(grouped[k]))
-        
-        result = grouped[region]
-        random.shuffle(result)
-        return result, region, theme_data
-    
-    def _fetch_camping(self) -> list:
-        try:
-            data = self.camping_api.get_campsite_list(num_of_rows=500)
-            return [self._norm_camping(i) for i in data if i.get('addr1') or i.get('doNm')]
-        except Exception as e:
-            logger.error(f"캠핑 조회 실패: {e}")
-            return []
-    
-    def _fetch_walk(self) -> list:
-        try:
-            data = self.durunubi_api.search_walking_trails(num_of_rows=200)
-            logger.info(f"걷기길 {len(data)}건 조회")
-            return [self._norm_durunubi(i) for i in data]
-        except Exception as e:
-            logger.error(f"걷기길 조회 실패: {e}")
-            return []
-    
-    def _fetch_bike(self) -> list:
-        try:
-            data = self.durunubi_api.search_bike_trails(num_of_rows=200)
-            return [self._norm_durunubi(i) for i in data]
-        except Exception as e:
-            logger.error(f"자전거길 조회 실패: {e}")
-            return []
-    
-    def _norm_camping(self, i: dict) -> dict:
-        hp = i.get('homepage', '') or ''
-        if hp and not hp.startswith('http'):
-            hp = ''
-        
-        pets = ''
-        if '가능' in (i.get('animalCmgCl') or ''):
-            pets = '동반 가능'
-        elif '불가' in (i.get('animalCmgCl') or ''):
-            pets = '동반 불가'
-        
-        return {
-            'title': i.get('facltNm', ''),
-            'addr1': i.get('addr1', '') or f"{i.get('doNm', '')} {i.get('sigunguNm', '')}".strip(),
-            'firstimage': i.get('firstImageUrl', ''),
-            'overview': i.get('intro', '') or i.get('featureNm', '') or i.get('lineIntro', ''),
-            'tel': i.get('tel', ''),
-            'homepage': hp,
-            'opentime': i.get('operDeCl', '') or i.get('operPdCl', ''),
-            'facilities': i.get('sbrsCl', ''),
-            'pets': pets,
-            'camptype': i.get('induty', ''),
-            'location_type': i.get('lctCl', ''),
-            'manage_type': i.get('mangeDivNm', ''),
-            'trailer_yn': 'Y' if i.get('trlerAcmpnyAt') == 'Y' else '',
-            'brazier': i.get('brazierCl', ''),
-            'nearby': i.get('posblFcltyCl', ''),
-            'toilet_count': int(i.get('toiletCo', 0) or 0),
-            'shower_count': int(i.get('swrmCo', 0) or 0),
-            'sink_count': int(i.get('wtrplCo', 0) or 0),
-            'source': 'camping'
-        }
-    
-    def _norm_durunubi(self, i: dict) -> dict:
-        dist = i.get('crsDstnc', '')
-        if dist:
-            try:
-                dist = f"{float(str(dist).replace('km','').strip())}km"
-            except:
-                pass
-        
-        time_val = i.get('crsTotlRqrmHour', '')
-        time_str = ''
-        if time_val:
-            try:
-                h = float(time_val)
-                if h >= 1:
-                    time_str = f"약 {int(h)}시간"
-                else:
-                    time_str = f"약 {int(h * 60)}분"
-            except:
-                pass
-        
-        lvl = {'1': '쉬움', '2': '보통', '3': '어려움'}.get(str(i.get('crsLevel', '')), '')
-        
-        return {
-            'title': i.get('crsKorNm', '') or i.get('crsNm', ''),
-            'addr1': i.get('sigun', '') or i.get('areaName', ''),
-            'firstimage': i.get('crsImgUrl', '') or i.get('imageUrl', ''),
-            'overview': i.get('crsSummary', '') or i.get('crsContents', ''),
-            'tel': i.get('crsTel', ''),
-            'homepage': i.get('crsHomepage', ''),
-            'distance': dist,
-            'time': time_str,
-            'level': lvl,
-            'source': 'durunubi'
-        }
-    
-    def _filter_items(self, items: list, theme_data: dict) -> list:
-        key = theme_data.get('filter_key')
-        if not key:
-            return items
-        
-        filtered = []
-        for item in items:
-            val = item.get(key, '')
-            
-            if isinstance(val, int):
-                if theme_data.get('filter_min') and val >= theme_data['filter_min']:
+        if filter_key and (filter_contains or filter_value):
+            filtered = []
+            for item in raw_items:
+                val = item.get(filter_key, '')
+                if filter_contains and filter_contains in str(val):
                     filtered.append(item)
-                elif theme_data.get('filter_max') and val <= theme_data['filter_max']:
+                elif filter_value and str(val) == str(filter_value):
                     filtered.append(item)
-                continue
-            
-            val = str(val)
-            
-            if theme_data.get('filter_value') and val == theme_data['filter_value']:
-                filtered.append(item)
-            elif theme_data.get('filter_contains') and theme_data['filter_contains'] in val:
-                filtered.append(item)
-            elif theme_data.get('filter_max'):
-                try:
-                    num = float(val.replace('km', '').strip())
-                    if num <= theme_data['filter_max']:
-                        filtered.append(item)
-                except:
-                    pass
-            elif theme_data.get('filter_min'):
-                try:
-                    num = float(val.replace('km', '').strip())
-                    if num >= theme_data['filter_min']:
-                        filtered.append(item)
-                except:
-                    pass
+            logger.info(f"테마 필터링: {len(raw_items)} -> {len(filtered)}")
+            raw_items = filtered if filtered else raw_items
         
-        return filtered if filtered else items
-    
-    def _get_region_group(self, addr: str) -> str:
-        if not addr:
-            return ''
-        for group, cities in self.regions.items():
-            for city in cities:
-                if city in addr:
-                    return group
-        parts = addr.split()
-        return parts[0] if parts else ''
-    
-    def _group_by_region(self, items: list) -> dict:
         grouped = defaultdict(list)
-        for item in items:
-            group = self._get_region_group(item.get('addr1', ''))
-            if group:
-                grouped[group].append(item)
-        return grouped
-    
-    def generate_title(self, theme: str, items: list, region: str, theme_data: dict) -> str:
-        angle = theme_data.get('angle', '')
-        if self.use_ai and self.ai_writer:
-            try:
-                return self.ai_writer.generate_title(theme, items, region, angle)
-            except Exception as e:
-                logger.error(f"AI 제목 생성 실패: {e}")
-        return f"{region} {theme} {len(items)}곳 정보"
-    
-    def generate_post(self, items: list, theme: str, region: str, theme_data: dict) -> dict:
-        self.image_handler.reset()
-        angle = theme_data.get('angle', '')
-        
-        for item in items:
-            item['firstimage'] = self.image_handler.get_image(item, region, theme)
-            item['naver_map_link'] = get_naver_map_link(item.get('title', ''))
-        
-        # 이미지 사용 기록 저장
-        self.image_handler.finalize()
-        
-        clean = []
-        for i in items:
-            cleaned = {k: v for k, v in i.items() if v and v != '확인 필요' and v != '–' and v != '-'}
-            clean.append(cleaned)
-        
-        if self.use_ai and self.ai_writer:
-            try:
-                content = self.ai_writer.generate_full_content(clean, theme, region, angle)
-                content = self._insert_images(content, clean)
-                content = self._insert_map_links(content, clean)
-                content = self._clean_empty_items(content)
+        with Session() as session:
+            for item in raw_items:
+                title = item.get('facltNm')
+                addr = item.get('addr1', '')
+                group = self._get_region_group(addr)
+                if not group: continue
                 
-                return {
-                    'content': content,
-                    'tags': [],  # 태그 제거
-                    'excerpt': self.ai_writer.generate_excerpt(theme, len(clean), region, angle),
-                    'featured_image': clean[0].get('firstimage', '') if clean else ''
-                }
-            except Exception as e:
-                logger.error(f"AI 생성 실패: {e}")
+                norm_name = normalize_title(title)
+                if not session.query(PlaceLog).filter_by(title_norm=norm_name).first():
+                    grouped[group].append({
+                        'title': title,
+                        'addr1': addr,
+                        'overview': item.get('intro', '') or item.get('lineIntro', ''),
+                        'firstimage': item.get('firstImageUrl', ''),
+                        'source': 'camping'
+                    })
         
-        return {
-            'content': self._build_html(clean, theme, region),
-            'tags': [],  # 태그 제거
-            'excerpt': f"{region} {theme} {len(clean)}곳 정보",
-            'featured_image': clean[0].get('firstimage', '') if clean else ''
-        }
-    
-    def _insert_images(self, content: str, items: list) -> str:
-        for item in items:
-            title = item.get('title', '')
-            img_url = item.get('firstimage', '')
-            
-            if not title or not img_url:
-                continue
-            
-            pattern = rf'(<h3>[^<]*{re.escape(title)}[^<]*</h3>)'
-            
-            img_html = f'''
-<figure class="wp-block-image">
-<img src="{img_url}" alt="{title}" loading="lazy"/>
-</figure>'''
-            
-            content = re.sub(pattern, rf'\1{img_html}', content, count=1)
+        valid_regions = [k for k, v in grouped.items() if len(v) >= 3]
+        if not valid_regions: return [], "", theme_data
         
-        return content
-    
-    def _insert_map_links(self, content: str, items: list) -> str:
+        selected_region = random.choice(valid_regions)
+        return grouped[selected_region][:6], selected_region, theme_data
+
+    def _fetch_durunubi(self, theme_data, source):
+        from core.durunubi_api import load_durunubi_client
+        api = load_durunubi_client()
+        
+        course_type = "1" if source == 'durunubi_walk' else "2"
+        raw_items = api.get_course_list(course_type=course_type, num_of_rows=200)
+        
+        filter_key = theme_data.get('filter_key')
+        filter_contains = theme_data.get('filter_contains')
+        filter_value = theme_data.get('filter_value')
+        
+        if filter_key and (filter_contains or filter_value):
+            filtered = []
+            for item in raw_items:
+                val = item.get(filter_key, '')
+                if filter_contains and filter_contains in str(val):
+                    filtered.append(item)
+                elif filter_value and str(val) == str(filter_value):
+                    filtered.append(item)
+            logger.info(f"테마 필터링: {len(raw_items)} -> {len(filtered)}")
+            raw_items = filtered if filtered else raw_items
+        
+        # 시리즈명 다양성 필터
+        seen_series = set()
+        diverse_items = []
+        for item in raw_items:
+            title = item.get('crsKorNm', '')
+            base = extract_base_name(title)
+            if base not in seen_series:
+                seen_series.add(base)
+                diverse_items.append(item)
+        
+        logger.info(f"시리즈 필터링: {len(raw_items)} -> {len(diverse_items)}")
+        raw_items = diverse_items if len(diverse_items) >= 5 else raw_items
+        
+        grouped = defaultdict(list)
+        with Session() as session:
+            for item in raw_items:
+                title = item.get('crsKorNm', '')
+                addr = item.get('sigun', '') or item.get('areaNm', '')
+                group = self._get_region_group(addr)
+                if not group: continue
+                
+                norm_name = normalize_title(title)
+                if not session.query(PlaceLog).filter_by(title_norm=norm_name).first():
+                    grouped[group].append({
+                        'title': title,
+                        'addr1': addr,
+                        'overview': item.get('crsContents', '') or item.get('crsSummary', ''),
+                        'firstimage': item.get('crsImg', ''),
+                        'source': source
+                    })
+        
+        valid_regions = [k for k, v in grouped.items() if len(v) >= 3]
+        if not valid_regions: return [], "", theme_data
+        
+        selected_region = random.choice(valid_regions)
+        items = grouped[selected_region][:6]
+        
+        return items, selected_region, theme_data
+
+    def process_html(self, content, items, theme, region=""):
+        """HTML 후처리 - 이미지 및 지도 링크 삽입"""
+        handler = self._get_image_handler()
+        
+        # 각 장소의 h3 태그를 찾아서 순서대로 처리
         for item in items:
-            title = item.get('title', '')
-            map_link = item.get('naver_map_link', '')
+            title = item['title']
             
-            if not title or not map_link:
-                continue
+            # 1. 이미지 삽입
+            img_url = handler.get_image(item, region=region, theme=theme)
+            if img_url:
+                img_tag = f'<figure class="wp-block-image"><img src="{img_url}" alt="{title} {theme}"/></figure>'
+                # h3 태그 뒤에 이미지 삽입
+                title_keyword = title.split()[0] if ' ' in title else title[:10]
+                pattern = f'(<h3>[^<]*{re.escape(title_keyword)}[^<]*</h3>)'
+                if re.search(pattern, content):
+                    content = re.sub(pattern, f'\\1\n{img_tag}', content, count=1)
             
-            map_html = f'<p><strong>지도:</strong> <a href="{map_link}" target="_blank" rel="noopener">네이버 지도에서 보기</a></p>'
+            # 2. 지도 링크 - 해당 장소의 info-box에만 삽입
+            map_url = get_naver_map_link(title)
+            map_tag = f'<p><a href="{map_url}" target="_blank">📍 네이버 지도에서 보기</a></p>'
             
-            pattern = rf'(<h3>[^<]*{re.escape(title)}[^<]*</h3>.*?)(</div>)'
+            # 해당 장소 섹션의 info-box 찾기 (h3 태그 이후의 첫 번째 info-box)
+            title_keyword = title.split()[0] if ' ' in title else title[:10]
             
-            def add_map(match):
+            # 패턴: h3 태그 ~ 다음 h3 또는 h2 전까지의 info-box
+            section_pattern = f'(<h3>[^<]*{re.escape(title_keyword)}[^<]*</h3>.*?)(<div class="info-box">)(.*?)(</div>)'
+            
+            def replace_info_box(match):
                 before = match.group(1)
-                closing = match.group(2)
-                if '네이버 지도에서 보기' not in before:
-                    return before + map_html + closing
+                box_open = match.group(2)
+                box_content = match.group(3)
+                box_close = match.group(4)
+                
+                # 이미 지도 링크가 있는지 확인
+                if '네이버 지도' not in box_content:
+                    return f'{before}{box_open}{box_content}\n{map_tag}\n{box_close}'
                 return match.group(0)
             
-            content = re.sub(pattern, add_map, content, count=1, flags=re.DOTALL)
+            content = re.sub(section_pattern, replace_info_box, content, count=1, flags=re.DOTALL)
+        
+        # 3. 마무리 섹션에 안내 문구 추가
+        notice = '<p class="notice">※ 가격 정보와 상세 문의 사항은 네이버 지도 후기를 참조해 주세요.</p>'
+        if '마무리</h2>' in content and notice not in content:
+            # 마무리 섹션의 마지막 </p> 뒤에 추가
+            content = re.sub(
+                r'(마무리</h2>.*?)(<p>.*?</p>)(\s*)$',
+                f'\\1\\2\n{notice}\\3',
+                content,
+                flags=re.DOTALL
+            )
         
         return content
-    
-    def _clean_empty_items(self, content: str) -> str:
-        empty_patterns = [
-            r'<p><strong>[^<]+:</strong>\s*[–\-]\s*</p>',
-            r'<p><strong>[^<]+:</strong>\s*</p>',
-            r'<p><strong>전화:</strong>\s*[–\-]?\s*</p>',
-            r'<p><strong>운영:</strong>\s*[–\-]?\s*</p>',
-        ]
+
+    def select_theme_with_images(self):
+        with open(self.config_path / "themes.yaml", 'r', encoding='utf-8') as f:
+            themes = yaml.safe_load(f)
+        selector = ThemeSelector(themes, Path("cache/theme_history.json"))
         
-        for pattern in empty_patterns:
-            content = re.sub(pattern, '', content)
+        handler = self._get_image_handler()
         
-        return content
-    
-    def _build_html(self, items: list, theme: str, region: str) -> str:
-        n = len(items)
+        for attempt in range(3):
+            theme_data = selector.select()
+            items, region, theme_data = self.fetch_items(theme_data)
+            
+            if items and handler.check_images_available(items, region, theme_data.get('theme', ''), min_images=2):
+                logger.info(f"시도 {attempt + 1}: 성공")
+                return items, region, theme_data
+            
+            logger.info(f"시도 {attempt + 1}: 이미지 부족, 재시도")
         
-        h = f"<p>{region} 지역 {theme} {n}곳을 소개합니다.</p>\n"
-        h += f"<h2>{region} {theme} {n}곳</h2>\n"
-        
-        for idx, i in enumerate(items, 1):
-            h += f"<h3>{idx}. {i.get('title','')}</h3>\n"
-            if i.get('firstimage'):
-                h += f'<figure class="wp-block-image"><img src="{i["firstimage"]}" alt="{i.get("title","")}" loading="lazy"/></figure>\n'
-            if i.get('overview'):
-                h += f"<p>{i['overview'][:300]}</p>\n"
-            h += '<div class="info-box">\n'
-            if i.get('addr1'):
-                h += f'<p><strong>주소:</strong> {i["addr1"]}</p>\n'
-            if i.get('tel'):
-                h += f'<p><strong>전화:</strong> {i["tel"]}</p>\n'
-            if i.get('naver_map_link'):
-                h += f'<p><strong>지도:</strong> <a href="{i["naver_map_link"]}" target="_blank" rel="noopener">네이버 지도에서 보기</a></p>\n'
-            h += '</div>\n'
-        
-        h += "<h2>마무리</h2>\n"
-        h += f"<p>{region} {theme} {n}곳을 정리했습니다.</p>"
-        
-        return h
+        return [], "", {}
 
 
 def load_content_generator():
