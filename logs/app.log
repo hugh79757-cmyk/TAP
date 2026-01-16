@@ -786,3 +786,33 @@
 2026-01-16 17:38:56,941 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post_16.html
 2026-01-16 17:38:56,941 - __main__ - INFO - 발행 완료: https://travelrefugee.blogspot.com/2026/01/blog-post_16.html
 2026-01-16 17:38:56,942 - __main__ - INFO - 작업 완료!
+2026-01-16 19:44:29,187 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 19:44:30,596 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 19:44:30,597 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 19:44:51,912 - __main__ - INFO - 선택된 지역: 대구광역시, 아이템 수: 6개
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 라운드힐 905 (대구광역시 달성군)
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 진밭골야영장 (대구광역시 수성구)
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 솔담길 오토캠핑장 (대구광역시 군위군)
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 낙동강 레포츠밸리 강변오토캠핑장 (대구광역시 달성군)
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 80포레스트카라반캠프 (대구광역시 군위군)
+2026-01-16 19:44:51,913 - __main__ - INFO -   - 동산계곡 야영장 (대구광역시 군위군)
+2026-01-16 19:44:51,914 - __main__ - INFO - 테마: 카라반, 지역: 대구광역시, 아이템: 6개
+2026-01-16 19:45:19,788 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 19:45:19,809 - __main__ - INFO - 제목: 대구광역시 완전 정복 카라반
+2026-01-16 19:45:21,711 - core.blogger_publisher - INFO - Blogger 발행 완료: http://travel.rotcha.kr/2026/01/blog-post_763.html
+2026-01-16 19:45:21,712 - __main__ - INFO - 발행 완료: http://travel.rotcha.kr/2026/01/blog-post_763.html
+2026-01-16 19:45:21,712 - __main__ - INFO - 작업 완료!
+2026-01-16 20:34:49,021 - __main__ - INFO - CSV + API 통합 콘텐츠 생성을 시작합니다.
+2026-01-16 20:34:50,440 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-01-16 20:34:50,441 - core.blogger_publisher - INFO - Blogger API 인증 성공
+2026-01-16 20:35:07,914 - __main__ - INFO - 선택된 지역: 강원도, 아이템 수: 4개
+2026-01-16 20:35:07,914 - __main__ - INFO -   - 횡성 온새미로 캠핑장 (강원도 횡성군)
+2026-01-16 20:35:07,915 - __main__ - INFO -   - 평창하늘캠핑장 (강원도 평창군)
+2026-01-16 20:35:07,915 - __main__ - INFO -   - 279캠핑장 (강원도 양양군)
+2026-01-16 20:35:07,915 - __main__ - INFO -   - 리버위드 글램핑 (강원도 춘천시)
+2026-01-16 20:35:07,915 - __main__ - INFO - 테마: 반려견 동반, 지역: 강원도, 아이템: 4개
+2026-01-16 20:35:26,745 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-16 20:35:26,767 - __main__ - INFO - 제목: 1월, 강원도 가족 글램핑장 TOP 4
+2026-01-16 20:35:28,599 - core.blogger_publisher - INFO - Blogger 발행 완료: https://travel.rotcha.kr/2026/01/1-top-4.html
+2026-01-16 20:35:28,600 - __main__ - INFO - 발행 완료: https://travel.rotcha.kr/2026/01/1-top-4.html
+2026-01-16 20:35:28,600 - __main__ - INFO - 작업 완료!

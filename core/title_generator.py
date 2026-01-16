@@ -1,85 +1,133 @@
 # core/title_generator.py
-"""다양한 제목 템플릿 기반 제목 생성기"""
+"""네이버 스타일 제목 생성기 v3.0"""
 
 import random
-import re
-import yaml
-from pathlib import Path
 from datetime import datetime
 
 
 class TitleGenerator:
+    
+    # 시기 표현 (20개)
+    TIME = [
+        "1월", "새해", "올해", "2026년",
+        "이번 주말", "주말 여행", "당일치기",
+        "겨울", "겨울 시즌", "한겨울",
+        "연말", "연초", "설 연휴", "명절",
+        "요즘 뜨는", "올겨울", "시즌", 
+        "지금 가기 좋은", "휴가철", "연휴",
+    ]
+    
+    # 감성/상황 표현 (20개)
+    MOOD = [
+        "감성", "힐링", "프라이빗", "가족",
+        "커플", "혼캠", "초보자용", "가성비",
+        "뷰 맛집", "인생샷", "조용한", "한적한",
+        "청정", "자연 속", "아이와 함께", "반려견 동반",
+        "럭셔리", "프리미엄", "숨은 명소", "현지인 추천",
+    ]
+    
+    # 시설 표현 (10개)
+    FACILITY = [
+        "글램핑장", "캠핑장", "카라반", "야영장", 
+        "오토캠핑장", "캠핑 명소", "캠핑 스팟",
+        "글램핑", "카라반 캠핑장", "캠핑 여행지",
+    ]
+    
+    # 숫자 포함 행동유도 (10개)
+    ACTION_WITH_NUM = [
+        "추천 {count}곳",
+        "BEST {count}",
+        "TOP {count}",
+        "{count}곳 총정리",
+        "{count}곳 모음",
+        "{count}선",
+        "{count}곳 엄선",
+        "{count}곳 완벽 정리",
+        "인기 {count}곳",
+        "{count}곳 핵심 정리",
+    ]
+    
+    # 숫자 없는 행동유도 (10개)
+    ACTION_NO_NUM = [
+        "추천",
+        "총정리", 
+        "완벽 가이드",
+        "모음",
+        "어디가 좋을까",
+        "여기로",
+        "떠나볼까",
+        "핵심 정리",
+        "알짜 정보",
+        "가볼만한 곳",
+    ]
+    
+    # 계절 매핑
+    SEASON_TIME = {
+        1: ["1월", "새해", "겨울", "한겨울", "올겨울", "연초"],
+        2: ["2월", "겨울", "설 연휴", "명절"],
+        3: ["3월", "봄", "초봄", "봄 시즌"],
+        4: ["4월", "봄", "봄나들이", "벚꽃 시즌"],
+        5: ["5월", "봄", "가정의 달", "초여름"],
+        6: ["6월", "여름", "초여름", "휴가철"],
+        7: ["7월", "여름", "한여름", "휴가 시즌", "여름휴가"],
+        8: ["8월", "여름", "한여름", "휴가철", "피서"],
+        9: ["9월", "가을", "초가을", "가을 시즌"],
+        10: ["10월", "가을", "단풍 시즌", "가을 여행"],
+        11: ["11월", "가을", "늦가을", "단풍"],
+        12: ["12월", "겨울", "연말", "크리스마스", "올겨울"],
+    }
+    
     def __init__(self):
-        self.templates = self._load_templates()
+        self.used_titles = []
     
-    def _load_templates(self) -> list:
-        """모든 카테고리의 템플릿을 하나의 리스트로 로드"""
-        template_path = Path(__file__).parent.parent / "config" / "title_templates.yaml"
-        
-        with open(template_path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-        
-        all_templates = []
-        for category, templates in data.items():
-            if isinstance(templates, list):
-                all_templates.extend(templates)
-        
-        return all_templates
-    
-    def _get_season(self) -> str:
-        """현재 월 기반 계절 반환"""
+    def _get_seasonal_time(self):
+        """현재 월에 맞는 시기 표현 반환"""
         month = datetime.now().month
-        if month in [3, 4, 5]:
-            return "봄"
-        elif month in [6, 7, 8]:
-            return "여름"
-        elif month in [9, 10, 11]:
-            return "가을"
-        else:
-            return "겨울"
+        seasonal = self.SEASON_TIME.get(month, self.TIME)
+        # 계절 표현 70%, 일반 표현 30%
+        if random.random() < 0.7:
+            return random.choice(seasonal)
+        return random.choice(self.TIME)
     
-    def generate(self, region: str, theme: str, count: int = None, 
-                 category: str = None) -> str:
+    def generate(self, region: str, theme: str = None, count: int = None) -> str:
         """제목 생성"""
-        template = random.choice(self.templates)
+        if count is None:
+            count = random.randint(3, 6)
         
-        now = datetime.now()
-        variables = {
-            "region": region,
-            "theme": theme,
-            "year": now.year,
-            "month": now.month,
-            "season": self._get_season(),
-        }
+        time = self._get_seasonal_time()
+        mood = random.choice(self.MOOD)
+        facility = random.choice(self.FACILITY)
         
-        # {count} 변수 제거
-        template = re.sub(r'\s*{count}곳', '', template)
-        template = re.sub(r'\s*{count}선', '', template)
-        template = re.sub(r'\s*{count}', '', template)
+        # 50% 확률로 숫자 포함
+        if random.random() > 0.5:
+            action = random.choice(self.ACTION_WITH_NUM).format(count=count)
+        else:
+            action = random.choice(self.ACTION_NO_NUM)
         
-        try:
-            title = template.format(**variables)
-        except KeyError:
-            title = f"{region} {theme} 추천"
+        title = f"{time}, {region} {mood} {facility} {action}"
         
-        # 빈 공백 정리
-        title = re.sub(r'\s+', ' ', title).strip()
+        # 중복 방지 (최근 10개)
+        attempts = 0
+        while title in self.used_titles and attempts < 10:
+            time = self._get_seasonal_time()
+            mood = random.choice(self.MOOD)
+            facility = random.choice(self.FACILITY)
+            if random.random() > 0.5:
+                action = random.choice(self.ACTION_WITH_NUM).format(count=count)
+            else:
+                action = random.choice(self.ACTION_NO_NUM)
+            title = f"{time}, {region} {mood} {facility} {action}"
+            attempts += 1
+        
+        self.used_titles.append(title)
+        if len(self.used_titles) > 10:
+            self.used_titles.pop(0)
         
         return title
     
-    def generate_multiple(self, region: str, theme: str, count: int = None, 
-                          num_titles: int = 5) -> list:
+    def generate_multiple(self, region: str, theme: str = None, count: int = 5) -> list:
         """여러 제목 생성"""
-        titles = set()
-        attempts = 0
-        max_attempts = num_titles * 3
-        
-        while len(titles) < num_titles and attempts < max_attempts:
-            title = self.generate(region, theme, count)
-            titles.add(title)
-            attempts += 1
-        
-        return list(titles)
+        return [self.generate(region, theme) for _ in range(count)]
 
 
 def load_title_generator():
@@ -88,9 +136,11 @@ def load_title_generator():
 
 if __name__ == "__main__":
     gen = TitleGenerator()
-    print(f"총 템플릿 수: {len(gen.templates)}개\n")
     
-    titles = gen.generate_multiple("강원도", "글램핑", num_titles=10)
-    print("생성된 제목 샘플:")
-    for i, title in enumerate(titles, 1):
-        print(f"  {i}. {title}")
+    total = len(gen.TIME) * len(gen.MOOD) * len(gen.FACILITY) * (len(gen.ACTION_WITH_NUM) + len(gen.ACTION_NO_NUM))
+    print(f"총 조합 가능: {total:,}개\n")
+    
+    print("=== 생성된 제목 샘플 ===")
+    for i in range(10):
+        title = gen.generate("강원도", "글램핑")
+        print(f"  {i+1}. {title}")
