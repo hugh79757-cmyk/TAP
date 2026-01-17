@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
-"""Tour Auto Publisher - CSV + API 통합 시스템"""
+"""Tour Auto Publisher v10.0 - API 기반 캠핑장 시스템"""
 
-import os
-import re
-import random
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
@@ -25,146 +22,90 @@ logger = logging.getLogger(__name__)
 
 
 def run_publish():
-    """메인 발행 함수"""
-    logger.info("CSV + API 통합 콘텐츠 생성을 시작합니다.")
+    """메인 발행 함수 v10.0"""
+    logger.info("=" * 50)
+    logger.info("TAP v10.0 시작")
+    logger.info("=" * 50)
     
     from core.blogger_publisher import load_publisher
     from core.ai_writer import load_ai_writer
     from core.title_generator import load_title_generator
-    from core.csv_data_loader import load_csv_loader
+    from core.camping_data import get_camping_data, get_random_theme
+    from core.content_processor import process_content
+    from core.config import ANGLE_MAP, DEFAULT_LABEL
     
     publisher = load_publisher()
     writer = load_ai_writer()
     title_gen = load_title_generator()
-    csv_loader = load_csv_loader()
     
     if not writer:
-        logger.error("OPENAI_API_KEY가 설정되지 않았습니다.")
+        logger.error("OPENAI_API_KEY 없음")
         return
     
-    # 랜덤 테마 선택 (50:50)
-    theme_data = csv_loader.get_random_theme()
-    theme = theme_data['theme']
-    theme_type = theme_data['type']
+    # 1. 테마 + 데이터
+    theme = get_random_theme()
+    logger.info(f"[1] 테마: {theme}")
     
-    # 아이템 조회 (limit=None이면 3~6 랜덤)
-    items = csv_loader.get_items_by_theme(theme_data, limit=None)
+    data = get_camping_data(theme)
+    if not data:
+        logger.warning(f"'{theme}' 데이터 없음, 글램핑 폴백")
+        data = get_camping_data('글램핑')
     
-    if not items:
-        logger.warning(f"테마 '{theme}'에 데이터 없음. 글램핑으로 폴백")
-        theme_data = {'theme': '글램핑', 'type': 'camping'}
-        theme = '글램핑'
-        theme_type = 'camping'
-        items = csv_loader.get_items_by_theme(theme_data, limit=None)
-    
-    if not items:
-        logger.error("사용 가능한 데이터가 없습니다.")
+    if not data:
+        logger.error("데이터 없음")
         return
     
-    # 지역 추출
-    do_name = items[0].get('do', '전국')
-    sigungu = items[0].get('sigungu', '')
-    if not do_name or do_name == 'nan':
-        do_name = '전국'
+    items = data['items']
+    display_region = data['display_region']
+    sigungu = data['sigungu']
     
-    logger.info(f"선택된 지역: {do_name} {sigungu}, 아이템 수: {len(items)}개")
+    logger.info(f"[2] 지역: {display_region} {sigungu}")
+    logger.info(f"[3] 장소: {len(items)}개")
     for item in items:
-        logger.info(f"  - {item['title']} ({item.get('do', '')} {item.get('sigungu', '')})")
+        logger.info(f"    - {item['title']}")
     
-    angle_map = {
-        '글램핑': '럭셔리 캠핑',
-        '카라반': '이동식 숙소',
-        '반려견 동반': '반려동물과 함께',
-        '자연풍경여행': '자연 속 힐링',
-        '맛있는여행': '맛집 탐방',
-        '전통·역사여행': '역사 탐방',
-        '액티비티여행': '액티비티 체험',
-        '명소여행': '명소 탐방',
-    }
-    angle = angle_map.get(theme, theme)
+    # 2. 제목
+    title = title_gen.generate(display_region, theme, len(items), sigungu=sigungu)
+    logger.info(f"[4] 제목: {title}")
     
-    logger.info(f"테마: {theme}, 지역: {do_name}, 아이템: {len(items)}개")
+    # 3. AI 글 생성
+    angle = ANGLE_MAP.get(theme, theme)
+    logger.info(f"[5] AI 생성 중... (앵글: {angle})")
     
-    # AI 콘텐츠 생성
     try:
         raw_content = writer.generate_full_content(
             items=items,
             theme=theme,
-            region=do_name,
+            region=f"{display_region} {sigungu}",
             angle=angle
         )
     except Exception as e:
-        logger.error(f"콘텐츠 생성 실패: {e}")
+        logger.error(f"AI 생성 실패: {e}")
         return
     
-    # 후처리: 이미지 + 네이버 지도 링크 추가
-    final_content = raw_content
+    # 4. 후처리
+    final_content = process_content(raw_content, items, display_region, theme)
+    logger.info(f"[6] 후처리 완료 ({len(final_content)}자)")
     
-    for item in items:
-        title = item['title']
-        addr = item.get('addr', '')
-        map_url = item.get('map_url', '')
-        image_url = item.get('image', '')
-        
-        addr_valid = addr and addr.strip() and addr != 'nan' and addr != 'None'
-        
-        info_parts = []
-        if addr_valid:
-            info_parts.append(f'<p><strong>주소:</strong> {addr}</p>')
-        if map_url:
-            info_parts.append(f'<p><a href="{map_url}" target="_blank">📍 {title} 네이버 지도에서 보기</a></p>')
-        
-        info_box = f'<div class="info-box">\n{"".join(info_parts)}\n</div>' if info_parts else ''
-        
-        title_keyword = title[:8] if len(title) >= 8 else title
-        pattern = f'(<h3[^>]*>.*?{re.escape(title_keyword)}.*?</h3>)'
-        match = re.search(pattern, final_content, re.IGNORECASE | re.DOTALL)
-        
-        if match:
-            replacement = match.group(1)
-            
-            if image_url and image_url.startswith('http'):
-                alt_text = f"{title} - {do_name} {theme}"
-                img_tag = f'<figure><img src="{image_url}" alt="{alt_text}" title="{title}"/></figure>'
-                replacement += '\n' + img_tag
-            
-            if info_box:
-                replacement += '\n' + info_box
-            
-            final_content = final_content.replace(match.group(1), replacement, 1)
+    # 5. 발행
+    labels = [DEFAULT_LABEL, theme, display_region]
+    logger.info(f"[7] 발행 중... (라벨: {labels})")
     
-    # 불필요한 텍스트 제거
-    final_content = re.sub(r'<p>\s*주소:\s*주소 정보 없음\s*</p>', '', final_content)
-    final_content = re.sub(r'<p>\s*주소:\s*</p>', '', final_content)
-    final_content = re.sub(r'주소:\s*주소 정보 없음', '', final_content)
-    final_content = re.sub(r'주소 정보 없음', '', final_content)
-    final_content = re.sub(r'주소:\s*nan', '', final_content, flags=re.IGNORECASE)
-    final_content = re.sub(r'주소:\s*None', '', final_content, flags=re.IGNORECASE)
-    final_content = re.sub(r'주소:\s*$', '', final_content, flags=re.MULTILINE)
-    final_content = re.sub(r'\n{3,}', '\n\n', final_content)
-    
-    # 안내 문구 추가
-    notice = '<p class="notice">※ 운영 시간, 예약 방법, 이용 요금 등 최신 정보는 네이버 지도에서 확인하시기 바랍니다. 방문 전 해당 장소의 공식 페이지나 전화 문의를 통해 정확한 정보를 확인하시는 것을 권장합니다.</p>'
-    final_content += f'\n{notice}'
-    
-    # 제목 생성 (sigungu 전달)
-    title = title_gen.generate(do_name, theme, len(items), sigungu=sigungu)
-    logger.info(f"제목: {title}")
-    
-    # Blogger 발행
     try:
         result = publisher.create_post(
             title=title,
             content=final_content,
-            labels=['국내여행', theme, do_name],
+            labels=labels,
             is_draft=False
         )
-        logger.info(f"발행 완료: {result.get('url', 'URL 없음')}")
+        logger.info(f"[8] 발행 완료: {result.get('url', 'URL 없음')}")
     except Exception as e:
         logger.error(f"발행 실패: {e}")
         return
     
+    logger.info("=" * 50)
     logger.info("작업 완료!")
+    logger.info("=" * 50)
 
 
 if __name__ == "__main__":
