@@ -1,4 +1,4 @@
-"""CSV 파일 기반 데이터 로더 + Photo API 이미지 연동 + 이미지 검증"""
+"""CSV 파일 기반 데이터 로더 + Photo API 이미지 연동 + 이미지 검증 + 테마 50:50"""
 
 import pandas as pd
 import requests
@@ -62,11 +62,8 @@ class CSVDataLoader:
                 for photo in photos:
                     url = photo.get('galWebImageUrl', '')
                     if url and url not in used_images:
-                        # http -> https 변환
                         if url.startswith('http://'):
                             url = url.replace('http://', 'https://')
-                        
-                        # 이미지 유효성 검증
                         if self._is_image_valid(url):
                             used_images.add(url)
                             return url
@@ -85,13 +82,6 @@ class CSVDataLoader:
             '글램핑': df['주요시설 글램핑'] > 0,
             '카라반': df['주요시설 카라반'] > 0,
             '반려견 동반': df['반려동물출입'].isin(['가능', '가능(소형견)']),
-            '낚시': df['테마환경'].str.contains('낚시', na=False),
-            '여름 물놀이': df['테마환경'].str.contains('여름물놀이', na=False),
-            '가을 단풍': df['테마환경'].str.contains('가을단풍', na=False),
-            '일출 명소': df['테마환경'].str.contains('일출', na=False),
-            '일몰 명소': df['테마환경'].str.contains('일몰', na=False),
-            '걷기길': df['테마환경'].str.contains('걷기길', na=False),
-            '액티비티': df['테마환경'].str.contains('액티비티', na=False),
         }
         
         if theme in theme_filters:
@@ -103,7 +93,7 @@ class CSVDataLoader:
         return valid_regions
     
     def get_camping_by_theme(self, theme: str, region: str = None, limit: int = None) -> list:
-        """테마별 캠핑장 조회 + 이미지 + 지역 필터링 강화"""
+        """테마별 캠핑장 조회"""
         if self.camping_df is None:
             return []
         
@@ -113,13 +103,6 @@ class CSVDataLoader:
             '글램핑': df['주요시설 글램핑'] > 0,
             '카라반': df['주요시설 카라반'] > 0,
             '반려견 동반': df['반려동물출입'].isin(['가능', '가능(소형견)']),
-            '낚시': df['테마환경'].str.contains('낚시', na=False),
-            '여름 물놀이': df['테마환경'].str.contains('여름물놀이', na=False),
-            '가을 단풍': df['테마환경'].str.contains('가을단풍', na=False),
-            '일출 명소': df['테마환경'].str.contains('일출', na=False),
-            '일몰 명소': df['테마환경'].str.contains('일몰', na=False),
-            '걷기길': df['테마환경'].str.contains('걷기길', na=False),
-            '액티비티': df['테마환경'].str.contains('액티비티', na=False),
         }
         
         if theme in theme_filters:
@@ -206,14 +189,16 @@ class CSVDataLoader:
             if image_url.startswith('http://'):
                 image_url = image_url.replace('http://', 'https://')
             
-            # 이미지 유효성 검증
             if image_url and not self._is_image_valid(image_url):
                 image_url = ''
             
+            region_name = str(row['지역명']) if pd.notna(row['지역명']) else ''
+            
             results.append({
                 'title': name,
-                'region': str(row['지역명']) if pd.notna(row['지역명']) else '',
-                'do': str(row['지역명']) if pd.notna(row['지역명']) else '',
+                'region': region_name,
+                'do': region_name,
+                'sigungu': '',
                 'category': str(row['콘텐츠분류명']) if pd.notna(row['콘텐츠분류명']) else '',
                 'image': image_url,
                 'detail_url': str(row.get('기사상세정보URL', '')) if pd.notna(row.get('기사상세정보URL', '')) else '',
@@ -226,7 +211,7 @@ class CSVDataLoader:
         return results
     
     def get_random_theme(self) -> dict:
-        """랜덤 테마 선택"""
+        """랜덤 테마 선택 - 캠핑 50% : 여행기사 50%"""
         camping_themes = [
             {'theme': '글램핑', 'type': 'camping'},
             {'theme': '카라반', 'type': 'camping'},
@@ -241,7 +226,8 @@ class CSVDataLoader:
             {'theme': '명소여행', 'type': 'article'},
         ]
         
-        if random.random() < 0.7:
+        # 50:50 비율
+        if random.random() < 0.5:
             return random.choice(camping_themes)
         else:
             return random.choice(article_themes)
